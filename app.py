@@ -1,18 +1,8 @@
-# ============================================================
-# TOXIC FRIEND DETECTOR - app.py
-# A fun NLP-based chat analyzer for college mini-projects
-# Tech Stack: Flask + Regex + Rule-based NLP + Embedded HTML/CSS/JS
-# ============================================================
-
 import os
 import re
 from flask import Flask, request, jsonify, render_template_string
 
 app = Flask(__name__)
-
-# ============================================================
-# SAMPLE CHATS - Realistic WhatsApp-style conversations
-# ============================================================
 
 SAMPLE_CHATS = {
     "healthy": """Alex: Hey! How are you doing? Been a while 😊
@@ -86,11 +76,6 @@ Ankit: bro pakka last time I promise bro luv you
 Dev: okay fine sending"""
 }
 
-# ============================================================
-# ANALYSIS ENGINE - Rule-based NLP with Regex
-# ============================================================
-
-# --- Toxic Word/Phrase Keywords ---
 TOXIC_KEYWORDS = [
     r'\bhate\b', r'\bstupid\b', r'\bidiot\b', r'\bloser\b', r'\bworthless\b',
     r'\bfake\b', r'\blie\b', r'\blied\b', r'\bblame\b', r'\byour fault\b',
@@ -101,7 +86,6 @@ TOXIC_KEYWORDS = [
     r'\bmake me feel\b', r'\byou make me\b', r'\byou\'re the worst\b',
 ]
 
-# --- Positive/Healthy Friendship Keywords ---
 POSITIVE_KEYWORDS = [
     r'\bproud of you\b', r'\bso happy for you\b', r'\bcelebrate\b',
     r'\bmissed you\b', r'\bmiss you\b', r'\btake care\b', r'\blove you\b',
@@ -112,7 +96,6 @@ POSITIVE_KEYWORDS = [
     r'\breal one\b', r'\byou matter\b', r'\bbelieve in you\b',
 ]
 
-# --- Need-Based / Assignment-Seeker Keywords ---
 NEED_KEYWORDS = [
     r'\bnotes bhej\b', r'\bassignment bhej\b', r'\bpdf bhej\b', r'\bpdf bhejna\b',
     r'\bpdf de\b', r'\bnotes de\b', r'\bassignment de\b', r'\bpractical file\b',
@@ -123,7 +106,6 @@ NEED_KEYWORDS = [
     r'\bassignment\b', r'\blecture\b', r'\bexam\b', r'\bsyllabus\b',
 ]
 
-# --- Dry/One-Word Reply Patterns ---
 DRY_PATTERNS = [
     r'^ok$', r'^okay$', r'^k$', r'^fine$', r'^hmm+$', r'^hm$',
     r'^no$', r'^yes$', r'^maybe$', r'^idk$', r'^lol$', r'^hi$',
@@ -131,14 +113,12 @@ DRY_PATTERNS = [
     r'^nahi$', r'^ha$', r'^na$', r'^ok\.$', r'^👍$', r'^😐$',
 ]
 
-# --- Ghosting Indicators ---
 GHOST_PATTERNS = [
     r'\bseen\b', r'\bleft on read\b', r'\bno reply\b',
     r'\bnot replying\b', r'\bignoring\b', r'\bignore\b',
     r'\bnever responds\b', r'\bdisappeared\b',
 ]
 
-# --- Manipulative Language ---
 MANIPULATIVE_KEYWORDS = [
     r'\byou never care\b', r'\bnobody loves me\b', r'\bfeel guilty\b',
     r'\bafter everything i did\b', r'\bforgetting me\b', r'\bdon\'t you care\b',
@@ -148,7 +128,6 @@ MANIPULATIVE_KEYWORDS = [
 
 
 def count_keyword_hits(text, patterns):
-    """Count how many keyword patterns match in the text."""
     text_lower = text.lower()
     count = 0
     for pattern in patterns:
@@ -158,17 +137,12 @@ def count_keyword_hits(text, patterns):
 
 
 def extract_messages(chat_text):
-    """
-    Extract individual messages from chat.
-    Supports WhatsApp format: 'Name: message'
-    """
     lines = chat_text.strip().split('\n')
     messages = []
     for line in lines:
         line = line.strip()
         if not line:
             continue
-        # Match "Name: message" pattern
         match = re.match(r'^[^:]+:\s*(.+)$', line)
         if match:
             messages.append(match.group(1).strip())
@@ -178,7 +152,6 @@ def extract_messages(chat_text):
 
 
 def count_dry_replies(messages):
-    """Count how many messages are one-word / dry replies."""
     dry_count = 0
     for msg in messages:
         msg_clean = msg.strip().lower()
@@ -186,14 +159,12 @@ def count_dry_replies(messages):
             if re.fullmatch(pattern, msg_clean):
                 dry_count += 1
                 break
-        # Also check very short messages (1-3 chars)
         if len(msg_clean) <= 3:
             dry_count += 1
     return dry_count
 
 
 def analyze_message_length(messages):
-    """Analyze average message length for effort detection."""
     if not messages:
         return 0
     lengths = [len(msg) for msg in messages]
@@ -201,10 +172,6 @@ def analyze_message_length(messages):
 
 
 def analyze_chat(chat_text):
-    """
-    MAIN ANALYSIS FUNCTION
-    Takes raw chat text and returns scores + verdict
-    """
     if not chat_text or len(chat_text.strip()) < 10:
         return {"error": "Please enter a valid chat conversation."}
 
@@ -214,37 +181,25 @@ def analyze_chat(chat_text):
     if total_messages < 2:
         return {"error": "Need at least a few messages to analyze!"}
 
-    # --- Count keyword hits ---
     toxic_hits = count_keyword_hits(chat_text, TOXIC_KEYWORDS)
     positive_hits = count_keyword_hits(chat_text, POSITIVE_KEYWORDS)
     need_hits = count_keyword_hits(chat_text, NEED_KEYWORDS)
     ghost_hits = count_keyword_hits(chat_text, GHOST_PATTERNS)
     manipulative_hits = count_keyword_hits(chat_text, MANIPULATIVE_KEYWORDS)
 
-    # --- Dry reply analysis ---
     dry_count = count_dry_replies(messages)
     dry_ratio = dry_count / total_messages if total_messages > 0 else 0
 
-    # --- Message effort level ---
     avg_length = analyze_message_length(messages)
 
-    # ============================================================
-    # SCORING LOGIC (0 - 100)
-    # ============================================================
-
-    # TOXICITY SCORE (higher = more toxic)
     toxicity_score = min(100, (toxic_hits * 12) + (manipulative_hits * 10) + (ghost_hits * 8))
 
-    # POSITIVITY SCORE (higher = more positive)
     positivity_score = min(100, (positive_hits * 10) + (max(0, avg_length - 10) * 0.5))
 
-    # DRYNESS SCORE (higher = more dry/boring)
     dryness_score = min(100, int(dry_ratio * 100) + (max(0, 20 - avg_length) * 2))
 
-    # NEEDINESS SCORE (higher = more need-based)
     neediness_score = min(100, need_hits * 10)
 
-    # FRIENDSHIP SCORE (overall health)
     friendship_score = max(0, min(100,
         50
         + (positive_hits * 5)
@@ -253,10 +208,6 @@ def analyze_chat(chat_text):
         - int(dry_ratio * 30)
         - (need_hits * 3)
     ))
-
-    # ============================================================
-    # FINAL VERDICT LOGIC
-    # ============================================================
 
     if toxicity_score >= 50 or manipulative_hits >= 3:
         if toxicity_score >= 70:
@@ -280,10 +231,6 @@ def analyze_chat(chat_text):
     else:
         verdict = "Fake Friendship 🎭"
         verdict_class = "fake"
-
-    # ============================================================
-    # FUNNY AI ADVICE GENERATOR
-    # ============================================================
 
     advice_lines = []
 
@@ -312,13 +259,8 @@ def analyze_chat(chat_text):
     if friendship_score >= 70:
         advice_lines.append("🏆 This friendship passed the vibe check. Rare W unlocked.")
 
-    # Default advice if nothing triggered
     if not advice_lines:
         advice_lines.append("🤖 Friendship status: Complicated. Like your relationship with deadlines.")
-
-    # ============================================================
-    # DETECTED BEHAVIORS (for display)
-    # ============================================================
 
     behaviors = []
     if toxic_hits > 0:
@@ -354,11 +296,6 @@ def analyze_chat(chat_text):
     }
 
 
-# ============================================================
-# HTML TEMPLATE - Fully embedded inside Python
-# Dark theme, cards, progress bars, emojis
-# ============================================================
-
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -367,7 +304,6 @@ HTML_TEMPLATE = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Toxic Friend Detector 🔍</title>
 <style>
-  /* ---- RESET & BASE ---- */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
@@ -396,7 +332,6 @@ HTML_TEMPLATE = """
     padding: 20px;
   }
 
-  /* ---- HEADER ---- */
   .header {
     text-align: center;
     padding: 40px 20px 30px;
@@ -435,13 +370,11 @@ HTML_TEMPLATE = """
     margin: 0 auto;
   }
 
-  /* ---- CONTAINER ---- */
   .container {
     max-width: 900px;
     margin: 0 auto;
   }
 
-  /* ---- CARD ---- */
   .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -471,7 +404,6 @@ HTML_TEMPLATE = """
     border-radius: 99px;
   }
 
-  /* ---- SAMPLE BUTTONS ---- */
   .sample-buttons {
     display: flex;
     flex-wrap: wrap;
@@ -519,7 +451,6 @@ HTML_TEMPLATE = """
     border-radius: 10px;
   }
 
-  /* ---- TEXTAREA ---- */
   textarea {
     width: 100%;
     min-height: 220px;
@@ -548,10 +479,8 @@ HTML_TEMPLATE = """
   .input-row .btn-analyze { flex: 1; min-width: 200px; }
   .input-row .btn-clear { flex: 0; }
 
-  /* ---- RESULTS ---- */
   #results { display: none; }
 
-  /* ---- VERDICT BANNER ---- */
   .verdict-banner {
     text-align: center;
     padding: 32px 20px;
@@ -593,7 +522,6 @@ HTML_TEMPLATE = """
   .verdict-average  { background: #1a1a2e; border-color: #7c3aed; color: #c4b5fd; }
   .verdict-fake     { background: #1a0a2e; border-color: #9d174d; color: #f9a8d4; }
 
-  /* ---- SCORES GRID ---- */
   .scores-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -641,7 +569,6 @@ HTML_TEMPLATE = """
     width: 0%;
   }
 
-  /* ---- BEHAVIORS LIST ---- */
   .behavior-item {
     background: #0d0f14;
     border: 1px solid var(--border);
@@ -652,7 +579,6 @@ HTML_TEMPLATE = """
     line-height: 1.5;
   }
 
-  /* ---- ADVICE CARDS ---- */
   .advice-item {
     background: #0d0f1488;
     border-left: 3px solid var(--accent);
@@ -664,7 +590,6 @@ HTML_TEMPLATE = """
     color: var(--text);
   }
 
-  /* ---- STATS ---- */
   .stats-row {
     display: flex;
     flex-wrap: wrap;
@@ -697,7 +622,6 @@ HTML_TEMPLATE = """
     margin-top: 2px;
   }
 
-  /* ---- LOADER ---- */
   #loader {
     display: none;
     text-align: center;
@@ -716,7 +640,6 @@ HTML_TEMPLATE = """
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ---- ERROR BOX ---- */
   .error-box {
     background: #450a0a;
     border: 1px solid #dc2626;
@@ -727,7 +650,6 @@ HTML_TEMPLATE = """
     font-size: 14px;
   }
 
-  /* ---- FOOTER ---- */
   .footer {
     text-align: center;
     padding: 30px;
@@ -735,7 +657,6 @@ HTML_TEMPLATE = """
     font-size: 12px;
   }
 
-  /* ---- FADE IN ANIMATION ---- */
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: translateY(0); }
@@ -745,7 +666,6 @@ HTML_TEMPLATE = """
 </head>
 <body>
 
-<!-- HEADER -->
 <div class="header">
   <div class="header-badge">🧠 NLP · Rule-Based · Mini Project</div>
   <h1>Toxic Friend Detector</h1>
@@ -754,7 +674,6 @@ HTML_TEMPLATE = """
 
 <div class="container">
 
-  <!-- INPUT CARD -->
   <div class="card">
     <div class="card-title">Sample Chats — Auto Fill</div>
     <div class="sample-buttons">
@@ -768,7 +687,7 @@ HTML_TEMPLATE = """
   <div class="card">
     <div class="card-title">Paste Your Chat Here</div>
     <textarea id="chatInput"
-      placeholder="Paste your WhatsApp chat here...&#10;&#10;Example format:&#10;Alex: Hey! How are you?&#10;Sam: I'm good, thanks! 😊&#10;Alex: Want to hang out this weekend?&#10;Sam: Absolutely! Let's do it!"
+      placeholder="Paste your WhatsApp chat here...&#10;&#10;Example format:&#10;Alex: Hey! How are you?&#10;Sam: I'm good, thanks! 😊&#10;Alex: Want to hang out this weekend?&#10;Sam: Absolute[...]
     ></textarea>
     <div class="input-row" style="margin-top:12px;">
       <button class="btn btn-analyze" onclick="analyzeChat()">🔍 Analyze Friendship</button>
@@ -776,13 +695,11 @@ HTML_TEMPLATE = """
     </div>
   </div>
 
-  <!-- LOADER -->
   <div id="loader">
     <div class="spinner"></div>
     <p style="color:var(--muted); font-size:13px;">Analyzing friendship patterns...</p>
   </div>
 
-  <!-- RESULTS -->
   <div id="results"></div>
 
 </div>
@@ -792,7 +709,6 @@ HTML_TEMPLATE = """
 </div>
 
 <script>
-// Sample chat data from Python (injected)
 const SAMPLES = {{ samples | tojson }};
 
 function fillSample(type) {
@@ -808,7 +724,6 @@ function clearAll() {
 }
 
 function getScoreColor(label, value) {
-  // Color logic per score type
   if (label === 'Toxicity' || label === 'Dryness' || label === 'Neediness') {
     if (value >= 60) return '#ef4444';
     if (value >= 30) return '#f97316';
@@ -869,7 +784,6 @@ function renderResults(data) {
     </div>
   </div>`;
 
-  // Stats
   html += `
   <div class="card fade-in">
     <div class="card-title">Chat Statistics</div>
@@ -889,7 +803,6 @@ function renderResults(data) {
     </div>
   </div>`;
 
-  // Detected Behaviors
   if (data.behaviors.length > 0) {
     html += `
     <div class="card fade-in">
@@ -898,7 +811,6 @@ function renderResults(data) {
     </div>`;
   }
 
-  // AI Advice
   html += `
   <div class="card fade-in">
     <div class="card-title">🤖 AI Relationship Advice</div>
@@ -915,7 +827,6 @@ async function analyzeChat() {
     return;
   }
 
-  // Show loader
   document.getElementById('loader').style.display = 'block';
   document.getElementById('results').style.display = 'none';
   document.getElementById('results').innerHTML = '';
@@ -933,7 +844,6 @@ async function analyzeChat() {
     document.getElementById('results').style.display = 'block';
     document.getElementById('results').innerHTML = renderResults(data);
 
-    // Animate progress bars after render
     if (data.scores) {
       setTimeout(() => {
         const s = data.scores;
@@ -949,7 +859,6 @@ async function analyzeChat() {
       }, 100);
     }
 
-    // Scroll to results
     document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   } catch (err) {
@@ -960,7 +869,6 @@ async function analyzeChat() {
   }
 }
 
-// Allow Ctrl+Enter to analyze
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') analyzeChat();
 });
@@ -969,19 +877,13 @@ document.addEventListener('keydown', (e) => {
 </html>
 """
 
-# ============================================================
-# FLASK ROUTES
-# ============================================================
-
 @app.route('/')
 def index():
-    """Render the main page with sample chats injected."""
     return render_template_string(HTML_TEMPLATE, samples=SAMPLE_CHATS)
 
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
-    """API endpoint: receives chat text, returns analysis JSON."""
     data = request.get_json()
     if not data or 'chat' not in data:
         return jsonify({"error": "No chat data received."}), 400
@@ -990,11 +892,6 @@ def analyze():
     result = analyze_chat(chat_text)
     return jsonify(result)
 
-
-# ============================================================
-# RUN THE APP
-# Supports local execution + Railway/cloud deployment
-# ============================================================
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
